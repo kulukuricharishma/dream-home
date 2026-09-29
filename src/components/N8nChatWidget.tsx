@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Bot, User, Minimize2, Maximize2, Loader2, Sparkles, RefreshCw } from 'lucide-react';
+import { Send, Bot, User, Minimize2, Maximize2, Loader2, Sparkles, RefreshCw, AlertCircle, X } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
   sender: 'user' | 'bot';
   text: string;
   timestamp: Date;
+  isError?: boolean;
 }
 
-const CHAT_WEBHOOK_URL = 'https://charishma1.app.n8n.cloud/webhook/c780d1aa-18e1-4ab0-8ed3-42cdf30b2a81/chat';
+const WEBHOOK_URL = 'https://charishma1.app.n8n.cloud/webhook/6a2982f3-8f86-41e1-9ff4-2f1d1f2381e0/chat';
 
 export const N8nChatWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,52 +17,46 @@ export const N8nChatWidget: React.FC = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
-      id: 'welcome-1',
+      id: 'welcome-msg',
       sender: 'bot',
-      text: 'Hi there! 👋 I am your DreamHome AI Design Assistant. Ask me anything about furniture styling, room layouts, or color choices!',
+      text: 'Hello! 👋 I am your DreamHome AI Assistant. How can I help you customize or style your space today?',
       timestamp: new Date(),
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasUnread, setHasUnread] = useState(false);
   const [sessionId] = useState<string>(() => {
-    // Generate or retrieve persistent chat session ID
-    const stored = localStorage.getItem('dreamhome_n8n_session_id');
+    const stored = localStorage.getItem('dreamhome_n8n_session_id_v2');
     if (stored) return stored;
     const fresh = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    localStorage.setItem('dreamhome_n8n_session_id', fresh);
+    localStorage.setItem('dreamhome_n8n_session_id_v2', fresh);
     return fresh;
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom of messages
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isOpen, isLoading]);
 
-  // Focus input when chat opens
   useEffect(() => {
     if (isOpen) {
-      setHasUnread(false);
       setTimeout(() => {
         inputRef.current?.focus();
       }, 150);
     }
   }, [isOpen]);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const trimmed = inputMessage.trim();
-    if (!trimmed || isLoading) return;
+  const handleSendMessage = async (textToSend?: string) => {
+    const text = (textToSend || inputMessage).trim();
+    if (!text || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: `msg_user_${Date.now()}`,
       sender: 'user',
-      text: trimmed,
+      text,
       timestamp: new Date(),
     };
 
@@ -70,21 +65,16 @@ export const N8nChatWidget: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Standard n8n chat payload structure supporting both Chat Trigger node and Webhook node
       const payload = {
         action: 'sendMessage',
         sessionId: sessionId,
-        chatInput: trimmed,
-        message: trimmed,
-        input: trimmed,
-        prompt: trimmed,
-        context: {
-          app: 'DreamHome',
-          page: window.location.pathname,
-        },
+        chatInput: text,
+        message: text,
+        input: text,
+        prompt: text,
       };
 
-      const response = await fetch(CHAT_WEBHOOK_URL, {
+      const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -95,15 +85,35 @@ export const N8nChatWidget: React.FC = () => {
 
       let botReplyText = '';
 
+      if (response.status === 404) {
+        botReplyText =
+          "⚠️ **Your n8n workflow is currently inactive.**\n\n" +
+          "To allow messages through:\n" +
+          "1. Open your workflow in **charishma1.app.n8n.cloud**\n" +
+          "2. In the top-right corner, switch the toggle from **Inactive** to **Active**\n" +
+          "3. Save the workflow and try sending your message again!";
+        
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_bot_${Date.now()}`,
+            sender: 'bot',
+            text: botReplyText,
+            timestamp: new Date(),
+            isError: true,
+          },
+        ]);
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
+        throw new Error(`Server returned status HTTP ${response.status}`);
       }
 
       const contentType = response.headers.get('content-type') || '';
 
       if (contentType.includes('application/json')) {
         const data = await response.json();
-        // Support all common n8n AI Chat Trigger / Agent response formats:
         if (typeof data === 'string') {
           botReplyText = data;
         } else if (Array.isArray(data) && data.length > 0) {
@@ -132,115 +142,120 @@ export const N8nChatWidget: React.FC = () => {
       }
 
       if (!botReplyText || botReplyText.trim() === '') {
-        botReplyText = "I received your message, but didn't get a response. How can I assist you with your room design?";
+        botReplyText = "I received your message, but didn't receive text back from the agent.";
       }
 
-      const botMsg: ChatMessage = {
-        id: `msg_bot_${Date.now()}`,
-        sender: 'bot',
-        text: botReplyText,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, botMsg]);
-      if (!isOpen) {
-        setHasUnread(true);
-      }
-    } catch (err) {
-      console.warn('n8n Chat webhook error:', err);
-      const fallbackMsg: ChatMessage = {
-        id: `msg_bot_err_${Date.now()}`,
-        sender: 'bot',
-        text: "I'm having a brief connection issue with the design assistant. Feel free to ask another question or explore our design collections!",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, fallbackMsg]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg_bot_${Date.now()}`,
+          sender: 'bot',
+          text: botReplyText,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown connection error';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg_err_${Date.now()}`,
+          sender: 'bot',
+          text: `⚠️ Connection notice (${errorMsg}). Please ensure your n8n workflow is active and allows requests.`,
+          timestamp: new Date(),
+          isError: true,
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleClearChat = () => {
+  const handleResetChat = () => {
     setMessages([
       {
         id: 'welcome-reset',
         sender: 'bot',
-        text: 'Chat history cleared. How can I help you design your space today?',
+        text: 'Conversation restarted. How can I help you design your space today?',
         timestamp: new Date(),
       },
     ]);
   };
 
+  const suggestions = [
+    'Tips for modern minimalist living room',
+    'Best wall color for a warm cozy bedroom',
+    'How to choose the right lighting',
+  ];
+
   return (
     <>
-      {/* Floating Toggle Button */}
-      {!isOpen && (
-        <button
-          type="button"
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 p-3.5 bg-stone-900 hover:bg-stone-800 text-stone-100 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 group flex items-center gap-2.5 border border-stone-700/60"
-          aria-label="Open DreamHome AI Assistant"
-        >
-          <div className="relative">
-            <MessageSquare className="w-5 h-5 text-amber-400 group-hover:rotate-6 transition-transform" />
-            {hasUnread && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-stone-900 animate-pulse" />
-            )}
-          </div>
-          <span className="hidden sm:inline font-semibold text-xs tracking-wide pr-1">Chat with AI</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute -top-0.5 -right-0.5" />
-        </button>
-      )}
+      {/* Floating launcher button */}
+      <div className="fixed bottom-6 right-6 z-50 flex items-center">
+        {!isOpen && (
+          <button
+            onClick={() => setIsOpen(true)}
+            aria-label="Open AI Chat Assistant"
+            className="flex items-center gap-3 px-4 py-3 bg-stone-900 hover:bg-stone-800 text-stone-100 rounded-full shadow-2xl transition-all duration-200 transform hover:scale-105 border border-stone-700/80 group"
+          >
+            <div className="relative">
+              <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-110 transition">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-stone-900 animate-pulse" />
+            </div>
+            <div className="text-left pr-1">
+              <div className="text-xs font-bold tracking-tight">AI Assistant</div>
+              <div className="text-[10px] text-amber-300 font-medium">n8n Connected</div>
+            </div>
+          </button>
+        )}
+      </div>
 
-      {/* Chat Window Panel */}
+      {/* Chat Window Dialog */}
       {isOpen && (
         <div
-          className={`fixed z-50 bg-white rounded-2xl shadow-2xl border border-stone-200/90 flex flex-col overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 ${
+          className={`fixed z-50 transition-all duration-300 flex flex-col bg-[#FAF8F5] border border-stone-300 rounded-2xl shadow-2xl overflow-hidden ${
             isExpanded
-              ? 'bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-32px)] sm:w-[480px] h-[calc(100vh-80px)] sm:h-[620px]'
-              : 'bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-32px)] sm:w-[380px] h-[520px]'
+              ? 'inset-4 sm:inset-10 md:inset-16 w-auto h-auto'
+              : 'bottom-5 right-5 w-[92vw] sm:w-[400px] h-[580px] max-h-[85vh]'
           }`}
         >
           {/* Header */}
-          <div className="bg-stone-900 text-stone-100 p-3.5 px-4 flex items-center justify-between border-b border-stone-800">
+          <div className="px-4 py-3.5 bg-stone-900 text-stone-100 flex items-center justify-between border-b border-stone-800">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
-                <Bot className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Sparkles className="w-4 h-4" />
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="font-serif font-bold text-sm tracking-wide text-white">DreamHome AI</h3>
-                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-950/60 px-1.5 py-0.2 rounded-full border border-emerald-500/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Online
-                  </span>
-                </div>
-                <p className="text-[10px] text-stone-400">Powered by n8n assistant</p>
+                <h3 className="font-serif font-bold text-sm text-stone-100 leading-tight">
+                  DreamHome AI Assistant
+                </h3>
+                <p className="text-[11px] text-stone-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                  n8n Cloud
+                </p>
               </div>
             </div>
 
-            {/* Header Controls */}
             <div className="flex items-center gap-1">
               <button
-                type="button"
-                onClick={handleClearChat}
-                title="Restart Chat"
+                onClick={handleResetChat}
+                title="Restart conversation"
                 className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg transition"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className="w-4 h-4" />
               </button>
               <button
-                type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
                 title={isExpanded ? 'Collapse' : 'Expand'}
-                className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg transition hidden sm:inline-flex"
+                className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg transition"
               >
-                {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
               <button
-                type="button"
                 onClick={() => setIsOpen(false)}
-                title="Close Chat"
+                title="Close chat"
                 className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg transition"
               >
                 <X className="w-4 h-4" />
@@ -248,89 +263,54 @@ export const N8nChatWidget: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Prompt Suggestions */}
-          <div className="bg-[#FAF8F5] border-b border-stone-200/80 px-3 py-2 flex items-center gap-1.5 overflow-x-auto text-[11px] scrollbar-none">
-            <span className="text-[10px] font-semibold text-stone-600 flex items-center gap-1 shrink-0">
-              <Sparkles className="w-3 h-3 text-amber-600" />
-              Suggest:
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setInputMessage('What wall color goes well with light oak wooden floors?');
-              }}
-              className="bg-white hover:bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-200 shrink-0 transition"
-            >
-              Wall colors
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setInputMessage('Help me style a cozy minimalist living room');
-              }}
-              className="bg-white hover:bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-200 shrink-0 transition"
-            >
-              Cozy living room
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setInputMessage('How should I choose between warm and cool lighting?');
-              }}
-              className="bg-white hover:bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-200 shrink-0 transition"
-            >
-              Lighting tips
-            </button>
-          </div>
-
-          {/* Messages Container */}
-          <div className="flex-1 p-3.5 sm:p-4 overflow-y-auto space-y-3.5 bg-[#FBF9F6]">
+          {/* Messages list */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-[#FAF8F5]">
             {messages.map((msg) => {
-              const isUser = msg.sender === 'user';
+              const isBot = msg.sender === 'bot';
               return (
                 <div
                   key={msg.id}
-                  className={`flex gap-2.5 max-w-[85%] ${isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
+                  className={`flex gap-2.5 ${isBot ? 'justify-start' : 'justify-end'}`}
                 >
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs ${
-                      isUser
-                        ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                        : 'bg-stone-900 text-amber-400'
-                    }`}
-                  >
-                    {isUser ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                  </div>
+                  {isBot && (
+                    <div className="w-7 h-7 rounded-lg bg-stone-900 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                      {msg.isError ? (
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                      ) : (
+                        <Bot className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                  )}
 
                   <div
-                    className={`p-3 rounded-2xl text-xs sm:text-[13px] leading-relaxed break-words shadow-xs ${
-                      isUser
-                        ? 'bg-stone-900 text-stone-100 rounded-tr-xs'
-                        : 'bg-white text-stone-800 border border-stone-200 rounded-tl-xs'
+                    className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                      isBot
+                        ? msg.isError
+                          ? 'bg-amber-50 text-stone-800 border border-amber-300 rounded-tl-sm'
+                          : 'bg-white text-stone-800 border border-stone-200 shadow-xs rounded-tl-sm'
+                        : 'bg-stone-900 text-stone-100 rounded-tr-sm shadow-xs'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                    <span
-                      className={`text-[9px] mt-1 block ${
-                        isUser ? 'text-stone-400 text-right' : 'text-stone-600'
-                      }`}
-                    >
-                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    {msg.text}
                   </div>
+
+                  {!isBot && (
+                    <div className="w-7 h-7 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                  )}
                 </div>
               );
             })}
 
-            {/* Typing / Loading indicator */}
             {isLoading && (
-              <div className="flex gap-2.5 max-w-[85%] mr-auto">
-                <div className="w-7 h-7 rounded-full bg-stone-900 text-amber-400 flex items-center justify-center shrink-0">
+              <div className="flex gap-2.5 items-center justify-start">
+                <div className="w-7 h-7 rounded-lg bg-stone-900 text-amber-400 flex items-center justify-center shrink-0">
                   <Bot className="w-3.5 h-3.5" />
                 </div>
-                <div className="p-3 bg-white text-stone-600 border border-stone-200 rounded-2xl rounded-tl-xs shadow-xs flex items-center gap-2 text-xs">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-                  <span>Consulting interior design model...</span>
+                <div className="px-3.5 py-2.5 bg-white border border-stone-200 rounded-2xl rounded-tl-sm shadow-xs flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 text-stone-600 animate-spin" />
+                  <span className="text-xs text-stone-500">n8n is thinking...</span>
                 </div>
               </div>
             )}
@@ -338,28 +318,46 @@ export const N8nChatWidget: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Form */}
+          {/* Quick prompt suggestions */}
+          {messages.length <= 2 && (
+            <div className="px-3.5 py-2 bg-stone-100/70 border-t border-stone-200 flex flex-wrap gap-1.5">
+              {suggestions.map((sug, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendMessage(sug)}
+                  disabled={isLoading}
+                  className="text-[11px] bg-white hover:bg-stone-200/80 text-stone-700 px-2.5 py-1 rounded-full border border-stone-300/80 transition"
+                >
+                  {sug}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input Box */}
           <form
-            onSubmit={handleSendMessage}
-            className="p-3 bg-white border-t border-stone-200/90 flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+            className="p-3 bg-white border-t border-stone-200 flex items-center gap-2"
           >
             <input
               ref={inputRef}
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Ask about room styling, colors, furniture..."
-              className="flex-1 text-xs sm:text-sm px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition placeholder:text-stone-400"
+              placeholder="Ask about room design, colors, lighting..."
               disabled={isLoading}
+              className="flex-1 text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 text-stone-900 disabled:opacity-50"
             />
-
             <button
               type="submit"
-              disabled={isLoading || !inputMessage.trim()}
-              className="p-2.5 bg-stone-900 hover:bg-stone-800 disabled:opacity-40 disabled:hover:bg-stone-900 text-stone-100 rounded-xl transition shadow-xs flex items-center justify-center shrink-0"
+              disabled={!inputMessage.trim() || isLoading}
               aria-label="Send message"
+              className="p-2.5 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-300 text-stone-100 rounded-xl transition shadow-xs"
             >
-              <Send className="w-4 h-4 text-amber-400" />
+              <Send className="w-4 h-4" />
             </button>
           </form>
         </div>

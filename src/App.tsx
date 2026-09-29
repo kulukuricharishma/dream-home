@@ -134,7 +134,7 @@ export default function App() {
       {/* Footer */}
       <Footer onNavigate={handleNavigate} />
 
-      {/* n8n AI Chat Assistant Widget */}
+      {/* n8n AI Chatbot Widget */}
       <N8nChatWidget />
     </div>
   );
