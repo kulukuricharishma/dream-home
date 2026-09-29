@@ -12,6 +12,7 @@ import { HomePage } from './pages/HomePage';
 import { CreateRoomPage } from './pages/CreateRoomPage';
 import { MyDesignsPage } from './pages/MyDesignsPage';
 import { InspirationPage } from './pages/InspirationPage';
+import { N8nChatWidget } from './components/N8nChatWidget';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'create' | 'designs' | 'inspiration'>('home');
@@ -132,6 +133,9 @@ export default function App() {
 
       {/* Footer */}
       <Footer onNavigate={handleNavigate} />
+
+      {/* n8n AI Chat Assistant Widget */}
+      <N8nChatWidget />
     </div>
   );
 }
