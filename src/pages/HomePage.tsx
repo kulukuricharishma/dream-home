@@ -39,9 +39,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onUseInspiration
       {/* HERO SECTION */}
       <section className="relative pt-12 sm:pt-20 pb-12 text-center max-w-4xl mx-auto px-4 sm:px-6">
         {/* Subtle decorative badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100/70 text-amber-900 text-xs font-semibold mb-6">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-700 animate-pulse" />
-          <span>Interactive Virtual Room Customizer</span>
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100/80 text-amber-900 text-xs font-semibold mb-6 border border-amber-200">
+          <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+          <span>Interactive 3D & 2D Virtual Room Customizer</span>
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-serif font-bold text-stone-900 tracking-tight leading-tight">
@@ -49,11 +49,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onUseInspiration
         </h1>
 
         <p className="mt-4 text-2xl sm:text-3xl font-serif text-stone-700 italic">
-          Design the space you dream of.
+          Design the space you dream of in full 3D.
         </p>
 
         <p className="mt-4 text-base sm:text-lg text-stone-600 max-w-2xl mx-auto leading-relaxed">
-          Create and customize your perfect room with simple furniture, colors, decorations, and lighting.
+          Create, furnish, and orbit your perfect room with realistic 3D spatial models, colors, flooring, and lighting.
         </p>
 
         {/* Buttons */}

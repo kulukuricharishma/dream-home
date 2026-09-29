@@ -82,7 +82,7 @@ export const RoomDetailModal: React.FC<RoomDetailModalProps> = ({
           </div>
         </div>
 
-        {/* 2D Room Preview Display */}
+        {/* 3D Room Preview Display */}
         <div className="mt-5 flex justify-center">
           <RoomPreview
             wallColor={design.wallColor}
@@ -91,7 +91,8 @@ export const RoomDetailModal: React.FC<RoomDetailModalProps> = ({
             furniture={design.furniture}
             decorations={design.decorations}
             lighting={design.lighting}
-            isInteractive={false}
+            isInteractive={true}
+            defaultMode="3d"
             className="w-full"
           />
         </div>
