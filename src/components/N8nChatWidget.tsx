@@ -70,12 +70,14 @@ export const N8nChatWidget: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Standard n8n chat payload structure
+      // Standard n8n chat payload structure supporting both Chat Trigger node and Webhook node
       const payload = {
         action: 'sendMessage',
         sessionId: sessionId,
         chatInput: trimmed,
         message: trimmed,
+        input: trimmed,
+        prompt: trimmed,
         context: {
           app: 'DreamHome',
           page: window.location.pathname,
@@ -101,13 +103,30 @@ export const N8nChatWidget: React.FC = () => {
 
       if (contentType.includes('application/json')) {
         const data = await response.json();
-        // Support common n8n AI Chat response keys (output, text, reply, message, data)
-        botReplyText =
-          data.output ||
-          data.text ||
-          data.message ||
-          data.reply ||
-          (typeof data === 'string' ? data : JSON.stringify(data));
+        // Support all common n8n AI Chat Trigger / Agent response formats:
+        if (typeof data === 'string') {
+          botReplyText = data;
+        } else if (Array.isArray(data) && data.length > 0) {
+          const first = data[0];
+          botReplyText =
+            first.output ||
+            first.text ||
+            first.message ||
+            first.reply ||
+            first.response ||
+            (typeof first === 'string' ? first : JSON.stringify(first));
+        } else if (typeof data === 'object' && data !== null) {
+          botReplyText =
+            data.output ||
+            data.text ||
+            data.message ||
+            data.reply ||
+            data.response ||
+            data.content ||
+            (data.data && typeof data.data === 'string' ? data.data : '') ||
+            (data.data && data.data.output ? data.data.output : '') ||
+            JSON.stringify(data);
+        }
       } else {
         botReplyText = await response.text();
       }
